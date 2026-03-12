@@ -1,0 +1,6 @@
+@FunnelOfThingsAPI_HostAddress = http://localhost:5125
+
+GET {{FunnelOfThingsAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
