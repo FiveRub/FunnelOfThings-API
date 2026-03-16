@@ -55,6 +55,10 @@ namespace FunnelOfThingsAPI.Controllers
             };
 
             _dbcontext.Users.Add(user);
+           
+            await _dbcontext.SaveChangesAsync();
+
+            user.IsActive = true;
             await _dbcontext.SaveChangesAsync();
 
 
