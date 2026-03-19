@@ -45,7 +45,7 @@ namespace FunnelOfThingsAPI.Controllers
 
             if (!orders.Any())
             {
-                return NotFound("Order not found");
+                return Ok(new List<OrderResponse>());
             }
 
             return Ok(orders.Select(MapToOrderResponse));
