@@ -67,8 +67,37 @@ namespace FunnelOfThingsAPI.Controllers
 
         // POST api/<ProductsController>
         [HttpPost]
-        public void Post([FromBody] string value)
+        public async Task<IActionResult> Create([FromBody] CreateProductRequest request)
         {
+            var product = new Product
+            {
+                SellerId = request.SellerId,
+                CategoryId = request.CategoryId,
+                Name = request.Name,
+                Slug = request.Slug,
+                Description = request.Description,
+                Price = request.Price,
+                Stock = request.Stock,
+                IsActive = true,
+                ModerationStatus = "approved",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbcontext.Products.Add(product);
+            await _dbcontext.SaveChangesAsync();
+
+            return Ok(new { message = "Товар добавлен", productId = product.Id });
+        }
+
+        public class CreateProductRequest
+        {
+            public int SellerId { get; set; }
+            public int CategoryId { get; set; }
+            public string Name { get; set; } = null!;
+            public string Slug { get; set; } = null!;
+            public string? Description { get; set; }
+            public decimal Price { get; set; }
+            public int Stock { get; set; }
         }
 
         // PUT api/<ProductsController>/5
