@@ -1,13 +1,9 @@
 ﻿using FunnelOfThingsAPI.Data;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using FunnelOfThingsAPI.Transfer.Requests;
 using FunnelOfThingsAPI.Models;
 using FunnelOfThingsAPI.Transfer.Responses;
 using Microsoft.EntityFrameworkCore;
-using System.Threading.Tasks;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace FunnelOfThingsAPI.Controllers
 {
@@ -21,99 +17,57 @@ namespace FunnelOfThingsAPI.Controllers
         {
             _dbcontext = dbcontext;
         }
-        // GET: api/<OrdersController>
+
+        // GET api/orders/detail/5
         [HttpGet("detail/{id}")]
         public async Task<IActionResult> GetOrderDetail(int id)
         {
-            var order = await _dbcontext.Orders.Include(o=> o.OrderItems)
-                .ThenInclude(oi=> oi.Product)
-                .FirstOrDefaultAsync(o=> o.Id == id);
+            var order = await _dbcontext.Orders
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
             if (order == null)
-            {
-                return NotFound(new { message = "Order not include"});
-            }
+                return NotFound(new { message = "Order not found" });
 
-
-
-            return Ok(new OrderResponse 
-            {
-                Id = order.Id,
-                UserId = order.UserId,
-                AddressId = order.AddressId,
-                Status = order.Status,
-                TotalPrice = order.TotalPrice,
-                CreatedAt = order.CreatedAt,
-                OrderItems = order.OrderItems.Select(oi=> new OrderItemResponse
-                {
-                    Id = oi.Id,
-                    ProductId = oi.ProductId,
-                    ProductName = oi.Product.Name,
-                    Quantity = oi.Quantity,
-                    Price = (float)oi.UnitPrice,
-
-
-                }).ToList()
-
-
-            });
+            return Ok(MapToOrderResponse(order));
         }
 
-
-        // GET api/<OrdersController>/5
-        [HttpGet("{userid}")]
-        public async Task<IActionResult> GetOrders(int userid)
+        // GET api/orders/by-user/5  ← исправлен конфликт роутов
+        [HttpGet("by-user/{userId}")]
+        public async Task<IActionResult> GetOrders(int userId)
         {
-            var orders = await _dbcontext.Orders.Include(o => o.OrderItems)
+            var orders = await _dbcontext.Orders
+                .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
-                .Where(o=> o.UserId==userid)
+                .Where(o => o.UserId == userId)
                 .ToListAsync();
 
             if (!orders.Any())
-            {
-                return NotFound("Order not found");
-            }
+                return NotFound(new { message = "Orders not found" });
 
-            return Ok(orders.Select( order=>new OrderResponse
-            {
-                Id = order.Id,
-                UserId = order.UserId,
-                AddressId = order.AddressId,
-                TotalPrice = order.TotalPrice,
-                Status = order.Status,
-                CreatedAt = order.CreatedAt,
-                OrderItems = order.OrderItems.Select(oi => new OrderItemResponse
-                {
-                    Id = oi.Id,
-                    ProductId = oi.ProductId,
-                    ProductName = oi.Product.Name,
-                    Quantity = oi.Quantity,
-                    Price = (float)oi.UnitPrice
-                }).ToList()
-            }));
-
+            return Ok(orders.Select(MapToOrderResponse));
         }
 
-        // POST api/<OrdersController>
+        // POST api/orders/create
         [HttpPost("create")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
-            var card = await _dbcontext.Carts.Include(c => c.CartItems)
-                .ThenInclude(ci=> ci.Product)
+            var cart = await _dbcontext.Carts
+                .Include(c => c.CartItems)
+                .ThenInclude(ci => ci.Product)
                 .FirstOrDefaultAsync(c => c.UserId == request.UserId);
 
-            if (card == null || card.CartItems.Count == 0)
-            {
-                return BadRequest("Cart is empty");
-            }
+            if (cart == null || cart.CartItems.Count == 0)
+                return BadRequest(new { message = "Cart is empty" });
 
-            var address = await _dbcontext.Addresses.FirstOrDefaultAsync(a => a.Id == request.AddressId && a.UserId == request.UserId);
+            var address = await _dbcontext.Addresses
+                .FirstOrDefaultAsync(a => a.Id == request.AddressId && a.UserId == request.UserId);
 
             if (address == null)
-            {
-                return BadRequest("Invalid address");
-            }
+                return BadRequest(new { message = "Invalid address" });
 
-            var totalPrice = card.CartItems.Sum(ci => ci.Quantity * ci.Product.Price);
+            var totalPrice = cart.CartItems.Sum(ci => ci.Quantity * ci.Product.Price);
 
             var order = new Order
             {
@@ -127,30 +81,32 @@ namespace FunnelOfThingsAPI.Controllers
             _dbcontext.Orders.Add(order);
             await _dbcontext.SaveChangesAsync();
 
-            foreach (var item in card.CartItems)
+            var orderItems = cart.CartItems.Select(item => new OrderItem
             {
-                _dbcontext.OrderItems.Add(new OrderItem
-                {
-                    OrderId = order.Id,
-                    ProductId = item.ProductId,
-                    Quantity = item.Quantity,
-                    UnitPrice = item.Product.Price,
-                    CreatedAt = DateTime.UtcNow
-                });
-               
+                OrderId = order.Id,
+                ProductId = item.ProductId,
+                Quantity = item.Quantity,
+                UnitPrice = item.Product.Price,
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
 
+            _dbcontext.OrderItems.AddRange(orderItems);
 
-            }
+            // ✅ Сохраняем items ДО того как удаляем корзину
+            // чтобы использовать cart.CartItems в ответе
+            var responseItems = cart.CartItems.Select(ci => new OrderItemResponse
+            {
+                Id = ci.Id,
+                ProductId = ci.ProductId,
+                ProductName = ci.Product.Name,
+                Quantity = ci.Quantity,
+                Price = (float)ci.Product.Price
+            }).ToList();
 
-            _dbcontext.CartItems.RemoveRange(card.CartItems);
-
+            _dbcontext.CartItems.RemoveRange(cart.CartItems);
             await _dbcontext.SaveChangesAsync();
 
-
-
-
-
-            return Ok(new OrderResponse 
+            return Ok(new OrderResponse
             {
                 Id = order.Id,
                 UserId = order.UserId,
@@ -158,50 +114,61 @@ namespace FunnelOfThingsAPI.Controllers
                 TotalPrice = order.TotalPrice,
                 Status = order.Status,
                 CreatedAt = order.CreatedAt,
-                OrderItems = card.CartItems.Select(ci => new OrderItemResponse
-                {
-                    Id = ci.Id,
-                    ProductId = ci.ProductId,
-                    ProductName = ci.Product.Name,
-                    Quantity = ci.Quantity,
-                    Price = (float)ci.Product.Price
-                }).ToList()
-
-
+                OrderItems = responseItems  // ✅ используем сохранённый список
             });
-
         }
 
-        // PUT api/<OrdersController>/5
+        // PUT api/orders/5/cancel
         [HttpPut("{id}/cancel")]
         public async Task<IActionResult> CancelOrder(int id)
         {
             var order = await _dbcontext.Orders.FindAsync(id);
 
             if (order == null)
-            {
-                return BadRequest();
+                return NotFound(new { message = "Order not found" });
 
-            }
+            // ✅ Регистр совпадает с тем что задаётся при создании
+            if (order.Status != "Pending")
+                return BadRequest(new { message = "Cannot cancel order with status: " + order.Status });
 
-            if (order.Status != "pending")
-            {
-                return BadRequest(new { message ="Cannot cancel order"});
-            }
-
-            order.Status = "cancelled";
-            //order.UpdateAt = DateTime.UtcNow;
-
+            order.Status = "Cancelled";
             await _dbcontext.SaveChangesAsync();
 
-            return Ok(new { message = "Order canceled" });
-
+            return Ok(new { message = "Order cancelled" });
         }
 
-        // DELETE api/<OrdersController>/5
+        // DELETE api/orders/5
         [HttpDelete("{id}")]
-        public void Delete(int id)
+        public async Task<IActionResult> Delete(int id)
         {
+            var order = await _dbcontext.Orders.FindAsync(id);
+
+            if (order == null)
+                return NotFound(new { message = "Order not found" });
+
+            _dbcontext.Orders.Remove(order);
+            await _dbcontext.SaveChangesAsync();
+
+            return Ok(new { message = "Order deleted" });
         }
+
+        // ✅ Вынесен общий маппинг чтобы не дублировать код
+        private static OrderResponse MapToOrderResponse(Order order) => new OrderResponse
+        {
+            Id = order.Id,
+            UserId = order.UserId,
+            AddressId = order.AddressId,
+            Status = order.Status,
+            TotalPrice = order.TotalPrice,
+            CreatedAt = order.CreatedAt,
+            OrderItems = order.OrderItems.Select(oi => new OrderItemResponse
+            {
+                Id = oi.Id,
+                ProductId = oi.ProductId,
+                ProductName = oi.Product.Name,
+                Quantity = oi.Quantity,
+                Price = (float)oi.UnitPrice
+            }).ToList()
+        };
     }
 }
