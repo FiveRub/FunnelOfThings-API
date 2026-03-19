@@ -27,13 +27,18 @@ namespace FunnelOfThingsAPI.Controllers
 
         // GET: api/<ProductsController>
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? categoryId = null)
         {
             var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-          
-            var products = await _dbcontext.Products
-                .Where(p => p.IsActive == true)
+            var query = _dbcontext.Products
+                .Where(p => p.IsActive == true);
+
+            // Фильтр по категории если передан
+            if (categoryId.HasValue)
+                query = query.Where(p => p.CategoryId == categoryId.Value);
+
+            var products = await query
                 .Select(p => new
                 {
                     p.Id,
