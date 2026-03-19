@@ -63,16 +63,17 @@ namespace FunnelOfThingsAPI.Controllers
         [HttpGet("{userid}")]
         public async Task<IActionResult> GetOrders(int userid)
         {
-            var order = await _dbcontext.Orders.Include(o => o.OrderItems)
+            var orders = await _dbcontext.Orders.Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
-                .FirstOrDefaultAsync(o => o.UserId == userid);
+                .Where(o=> o.UserId==userid)
+                .ToListAsync();
 
-            if (order == null)
+            if (!orders.Any())
             {
                 return NotFound("Order not found");
             }
 
-            return Ok(new OrderResponse
+            return Ok(orders.Select( order=>new OrderResponse
             {
                 Id = order.Id,
                 UserId = order.UserId,
@@ -88,7 +89,7 @@ namespace FunnelOfThingsAPI.Controllers
                     Quantity = oi.Quantity,
                     Price = (float)oi.UnitPrice
                 }).ToList()
-            });
+            }));
 
         }
 
