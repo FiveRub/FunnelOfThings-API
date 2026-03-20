@@ -88,8 +88,7 @@ namespace FunnelOfThingsAPI.Controllers
             });
         }
 
-        // POST api/Authorization/login
-        [HttpPost("login")] // ← добавил атрибут
+        [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             var user = await _dbcontext.Users
@@ -101,6 +100,13 @@ namespace FunnelOfThingsAPI.Controllers
             if (!user.IsActive)
                 return Unauthorized(new { message = "Аккаунт заблокирован" });
 
+            // ← Получаем роль пользователя
+            var role = await _dbcontext.UserRoles
+                .Include(ur => ur.Role)
+                .Where(ur => ur.UserId == user.Id)
+                .Select(ur => ur.Role.Name)
+                .FirstOrDefaultAsync();
+
             var token = GenerateToken(user);
 
             return Ok(new AuthResponse
@@ -110,7 +116,8 @@ namespace FunnelOfThingsAPI.Controllers
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 Phone = user.Phone,
-                Token = token
+                Token = token,
+                Role = role ?? "buyer" 
             });
         }
 
@@ -135,6 +142,7 @@ namespace FunnelOfThingsAPI.Controllers
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: creds
             );
+
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
