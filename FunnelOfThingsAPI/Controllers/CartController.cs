@@ -20,17 +20,19 @@ namespace FunnelOfThingsAPI.Controllers
             _dbcontext = dbcontext;
         }
 
-  
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetCart(int userId)
         {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
             var cart = await _dbcontext.Carts
                 .Include(c => c.CartItems)
                     .ThenInclude(ci => ci.Product)
+                        .ThenInclude(p => p.ProductImages)
                 .FirstOrDefaultAsync(c => c.UserId == userId);
 
             if (cart == null)
-                return Ok(new { items = new List<object>(), total = 0 });
+                return Ok(new { cartId = 0, items = new List<object>(), total = 0 });
 
             var items = cart.CartItems.Select(ci => new
             {
@@ -39,7 +41,11 @@ namespace FunnelOfThingsAPI.Controllers
                 ProductName = ci.Product.Name,
                 ProductPrice = ci.Product.Price,
                 ci.Quantity,
-                Subtotal = ci.Product.Price * ci.Quantity
+                Subtotal = ci.Product.Price * ci.Quantity,
+                MainImageUrl = ci.Product.ProductImages
+                    .Where(pi => pi.IsMain)
+                    .Select(pi => baseUrl + pi.Url)
+                    .FirstOrDefault()
             });
 
             return Ok(new
@@ -50,10 +56,8 @@ namespace FunnelOfThingsAPI.Controllers
             });
         }
 
-
         [HttpPost("add")]
-        public async Task<IActionResult> AddToCart(
-        [FromBody] AddToCartRequest request)
+        public async Task<IActionResult> AddToCart([FromBody] AddToCartRequest request)
         {
             var cart = await _dbcontext.Carts
                 .Include(c => c.CartItems)
@@ -94,8 +98,7 @@ namespace FunnelOfThingsAPI.Controllers
         }
 
         [HttpPut("update/{cartItemId}")]
-        public async Task<IActionResult> UpdateQuantity(
-            int cartItemId, [FromBody] int quantity)
+        public async Task<IActionResult> UpdateQuantity(int cartItemId, [FromBody] int quantity)
         {
             var item = await _dbcontext.CartItems.FindAsync(cartItemId);
 
@@ -137,6 +140,7 @@ namespace FunnelOfThingsAPI.Controllers
             return Ok(new { message = "Корзина очищена" });
         }
     }
+
     public class AddToCartRequest
     {
         public int UserId { get; set; }
