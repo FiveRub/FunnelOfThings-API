@@ -64,6 +64,40 @@ namespace FunnelOfThingsAPI.Controllers
             return Ok(result);
         }
 
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+            var product = await _dbcontext.Products
+                .Include(p => p.ProductImages)
+                .Include(p => p.ProductAttributes)
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
+
+            if (product == null)
+                return NotFound(new { message = "Товар не найден" });
+
+            return Ok(new
+            {
+                product.Id,
+                product.Name,
+                product.Description,
+                product.Price,
+                product.Stock,
+                Images = product.ProductImages
+                    .OrderBy(pi => pi.SortOrder)
+                    .Select(pi => new
+                    {
+                        pi.Id,
+                        Url = baseUrl + pi.Url,
+                        pi.IsMain,
+                        pi.AltText
+                    }),
+                Attributes = product.ProductAttributes
+                    .Select(pa => new { pa.Name, pa.Value })
+            });
+        }
+
 
         // POST api/<ProductsController>
         [HttpPost]

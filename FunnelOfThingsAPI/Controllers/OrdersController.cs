@@ -28,12 +28,12 @@ namespace FunnelOfThingsAPI.Controllers
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (order == null)
-                return NotFound(new { message = "Order not found" });
+                return NotFound(new { message = "Заказ не найден" });
 
             return Ok(MapToOrderResponse(order));
         }
 
-        // GET api/orders/by-user/5  ← исправлен конфликт роутов
+       
         [HttpGet("by-user/{userId}")]
         public async Task<IActionResult> GetOrders(int userId)
         {
@@ -94,8 +94,6 @@ namespace FunnelOfThingsAPI.Controllers
 
             _dbcontext.OrderItems.AddRange(orderItems);
 
-            // ✅ Сохраняем items ДО того как удаляем корзину
-            // чтобы использовать cart.CartItems в ответе
             var responseItems = cart.CartItems.Select(ci => new OrderItemResponse
             {
                 Id = ci.Id,
@@ -116,7 +114,7 @@ namespace FunnelOfThingsAPI.Controllers
                 TotalPrice = order.TotalPrice,
                 Status = order.Status,
                 CreatedAt = order.CreatedAt,
-                OrderItems = responseItems  // ✅ используем сохранённый список
+                OrderItems = responseItems 
             });
         }
 
@@ -129,7 +127,7 @@ namespace FunnelOfThingsAPI.Controllers
             if (order == null)
                 return NotFound(new { message = "Order not found" });
 
-            // ✅ Регистр совпадает с тем что задаётся при создании
+            
             if (order.Status != "Pending")
                 return BadRequest(new { message = "Cannot cancel order with status: " + order.Status });
 
@@ -154,7 +152,7 @@ namespace FunnelOfThingsAPI.Controllers
             return Ok(new { message = "Order deleted" });
         }
 
-        // ✅ Вынесен общий маппинг чтобы не дублировать код
+
         private static OrderResponse MapToOrderResponse(Order order) => new OrderResponse
         {
             Id = order.Id,
